@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "cosmos.patcher": {
+      "version": "3.0.92",
+      "commands": [
+        "cosmos.patcher"
+      ],
+      "rollForward": false
+    }
+  }
+}
