@@ -12,4 +12,29 @@
     <PackageReference Include="Cosmos.Executable.Lua" Version="4.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="tools/DiskImageBuilder/**/*.cs" />
+  </ItemGroup>
+
+  <Target Name="BuildXSNOSDiskImage" AfterTargets="Publish" DependsOnTargets="BuildISO">
+    <PropertyGroup>
+      <_DiskImageElf>$([MSBuild]::NormalizePath('$(OutputPath)', '$(AssemblyName).elf'))</_DiskImageElf>
+      <_DiskImageOutput>$([MSBuild]::NormalizePath('$(PublishDir)', '$(AssemblyName).img'))</_DiskImageOutput>
+      <_DiskImageLimineDir>$([MSBuild]::NormalizePath('$(CosmosIntermediateOutputPath)', 'limine'))</_DiskImageLimineDir>
+      <_DiskImageBuilderProject>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'tools', 'DiskImageBuilder', 'DiskImageBuilder.csproj'))</_DiskImageBuilderProject>
+      <_DiskImageLua>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'lua'))</_DiskImageLua>
+      <_DiskImageLimineConfig>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'Bootloader', 'disk-limine.conf'))</_DiskImageLimineConfig>
+      <_DiskImageLimineTool>$([MSBuild]::NormalizePath('$(_DiskImageLimineDir)', 'limine'))</_DiskImageLimineTool>
+      <_DiskImageLimineTool Condition="'$(OS)' == 'Windows_NT'">$(_DiskImageLimineTool).exe</_DiskImageLimineTool>
+    </PropertyGroup>
+
+    <Error Condition="'$(CosmosArch)' != 'x64' and '$(CosmosArch)' != 'arm64'" Text="Disk image packaging supports x64 and ARM64 only." />
+    <Error Condition="!Exists('$(_DiskImageElf)')" Text="Kernel ELF not found: $(_DiskImageElf)" />
+    <Error Condition="!Exists('$(_DiskImageLimineDir)')" Text="Limine files not found: $(_DiskImageLimineDir)" />
+
+    <Exec Command="dotnet run --project &quot;$(_DiskImageBuilderProject)&quot; --configuration Release --no-launch-profile -- &quot;$(_DiskImageOutput)&quot; &quot;$(_DiskImageElf)&quot; &quot;$(_DiskImageLimineDir)&quot; &quot;$(_DiskImageLua)&quot; &quot;$(_DiskImageLimineConfig)&quot; &quot;$(CosmosArch)" />
+    <Exec Condition="'$(CosmosArch)' == 'x64'" Command="&quot;$(_DiskImageLimineTool)&quot; bios-install &quot;$(_DiskImageOutput)&quot;" />
+    <Message Importance="High" Text="Bootable FAT32 disk image created: $(_DiskImageOutput)" />
+  </Target>
+
 </Project>

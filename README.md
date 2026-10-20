@@ -2,7 +2,7 @@
 <p>XSNOS 2 is an operating system that is definitely not very poorly made.</p>
 
 <h2>building</h2>
-<p>build it like you would any cosmos gen3 project. just rtfm.</p>
+<p>go into project root and run <code>dotnet publish -c Debug -r linux-x64 -o output-x64 --verbosity minimal</code></p>
 
 <h2>usage</h2>
 <p>type hlpcm for help.</p>

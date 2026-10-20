@@ -16,3 +16,6 @@ Desktop.ini
 
 disk.img
 XSNOS.iso
+XSNOS.img
+output-x64/
+output-arm64/
