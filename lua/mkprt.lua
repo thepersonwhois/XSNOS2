@@ -15,14 +15,14 @@ local function main()
         return
     end
 
-    print("found Primary Disk: " .. disk.name)
+    print("found primary disk: " .. disk.name)
     io.write("checking for partition scheme: ")
     if disk.scheme == "gpt" then
-        print("found GUID partition table")
+        print("found guid partition table")
     elseif disk.scheme == "mbr" then
         print("found good ol' MBR.")
     else
-        print("no partition table (raw).")
+        print("no partition table (raw, like republicans like their meat).")
     end
 
     print("\n[1] create GUID partition table")
@@ -73,7 +73,7 @@ local function main()
             start_sector,
             disk.block_count,
             disk_mib))
-        print("pick a smaller sector count, or make a bigger disk.img.")
+        print("pick a smaller sector count, or get a bigger disk.")
         return
     end
 
@@ -84,7 +84,7 @@ local function main()
         return
     end
 
-    print("rescanning partition tables to alert kernel... done.")
+    print("rescanning partition tables to alert kernel... (hey, this gives ioctl() vibes) done.")
     print(result)
 end
 

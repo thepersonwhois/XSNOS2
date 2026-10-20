@@ -70,7 +70,7 @@ internal static class KernelInstaller
         IBlockDevice? bootDisk = GetBootDisk();
         if (bootDisk is null)
         {
-            return (false, "cannot identify the running system disk; refusing to install");
+            return (false, "cannot identify the running system disk refusing to install");
         }
 
         IBlockDevice? target = StorageManager.Devices.FirstOrDefault(
@@ -81,11 +81,11 @@ internal static class KernelInstaller
         }
         if (ReferenceEquals(target, bootDisk))
         {
-            return (false, "refusing to erase the disk the installer booted from");
+            return (false, "refusing to erase the disk the installer booted from because duh");
         }
         if (target.BlockSize != 512)
         {
-            return (false, $"unsupported block size: {target.BlockSize}; GPT support currently requires 512-byte sectors");
+            return (false, $"unsupported block size: {target.BlockSize} .");
         }
 
         List<(ulong Start, ulong Count)> partitions;
@@ -113,10 +113,10 @@ internal static class KernelInstaller
                 }
             }
 
-            Console.WriteLine($"Wiping all {target.BlockCount} sectors on {target.Name}...");
+            Console.WriteLine($"wiping all {target.BlockCount} sectors on {target.Name}...");
             WipeDisk(target);
 
-            Console.WriteLine("Writing GPT partition table...");
+            Console.WriteLine("writing guid");
             Gpt.Create(target);
             for (int index = 0; index < partitions.Count; index++)
             {
@@ -134,7 +134,7 @@ internal static class KernelInstaller
             IReadOnlyList<Partition> targetPartitions = StorageManager.GetPartitions(target);
             if (targetPartitions.Count != partitions.Count)
             {
-                throw new IOException($"GPT scan found {targetPartitions.Count} partitions; expected {partitions.Count}");
+                throw new IOException($"GPT scan found {targetPartitions.Count} partitions: expected {partitions.Count} . this is green't");
             }
 
             Console.WriteLine($"Formatting {partitions.Count} FAT32 partition(s)...");
@@ -145,7 +145,7 @@ internal static class KernelInstaller
                 Partition partition = targetPartitions[index];
                 if (partition.StartSector != start || partition.BlockCount != count)
                 {
-                    throw new IOException($"GPT scan returned unexpected geometry for partition {index + 1}");
+                    throw new IOException($"GPT scan returned unexpected geometry for partition {index + 1} don't ask me why");
                 }
                 string label = index == 0 ? "XSNOS" : "DATA" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
                 if (label.Length > 11)
@@ -185,14 +185,14 @@ internal static class KernelInstaller
             {
                 if (!VfsManager.TryUnmount(TargetMountPoint))
                 {
-                    throw new IOException("could not unmount the installed EFI system partition");
+                    throw new IOException("could not unmount the installed EFI system partition. what");
                 }
             }
-            return (true, $"installation complete on {target.Name}; first partition is the EFI system partition");
+            return (true, $"installation complete on {target.Name}. have fuuuunnnn");
         }
         catch (Exception e)
         {
-            return (false, "installation failed after modifying the disk: " + e.Message);
+            return (false, "installation failed after modifying the disk. this is very not green: " + e.Message);
         }
     }
 

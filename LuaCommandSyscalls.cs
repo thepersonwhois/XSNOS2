@@ -191,7 +191,7 @@ internal static class LuaCommandSyscalls
 
         if (string.IsNullOrWhiteSpace(label))
         {
-            label = "COSMOS";
+            label = "XSNOS";
         }
         label = label.Length > 11 ? label[..11] : label.PadRight(11);
         FatType type = typeValue switch
