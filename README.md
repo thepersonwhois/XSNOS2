@@ -14,7 +14,7 @@
   <li>sys_green() - makes your text GREEN, unfortunately not medium spring.</li>
   <li>sys_scrh() - gets the screen height</li>
   <li>sys_scrw() - gets the screen width</li>
-  <li>sys_ver() - gets the version of xsnos2 you're on. i think this is 2.0.0 full release 1.</li>
+  <li>sys_ver() - gets the version of xsnos2 you're on. i think this is 26.10.</li>
   <li>sys_white() - undoes sys_green(), as sys_green() is permanent and persists when your lua program closes, but why would you ever want to undo sys_green()</li>
   <li>sys_cwd() - gets the cwd because we need that</li>
   <li>sys_readkey() - reads your keys. returns key name, character (with some exceptions, like unprintable keys), and a boolean for if ctrl is held</li>
