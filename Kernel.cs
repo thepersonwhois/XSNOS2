@@ -15,7 +15,7 @@ namespace XSNOS;
 
 public class Kernel : Sys.Kernel
 {
-    public static string ver = "2.0.0";
+    public static string ver = "26.10";
 
     protected override void BeforeRun()
     {
