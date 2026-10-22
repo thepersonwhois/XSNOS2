@@ -435,6 +435,7 @@ public class Kernel : Sys.Kernel
             add(state,createPartition,"sys_partition");
             add(state,KernelInstaller.ListDisks,"sys_installer_disks");
             add(state,KernelInstaller.Install,"sys_install");
+            add(state,LuaCommandSyscalls.MountDrive,"sys_mount");
             lua.DoFile(real, SplitArguments(argsString));
         }
         catch (LuaException e)

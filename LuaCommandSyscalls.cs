@@ -10,6 +10,53 @@ namespace XSNOS;
 
 internal static class LuaCommandSyscalls
 {
+        public static int MountDrive(ILuaState lua)
+    {
+        string deviceName = LuaText.Decode(lua.ToString(1) ?? string.Empty);
+        string mountPath = ReadPath(lua, 2);
+
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return PushResult(lua, false, "device name cannot be empty");
+        }
+
+        if (string.IsNullOrWhiteSpace(mountPath))
+        {
+            return PushResult(lua, false, "invalid target mount path");
+        }
+
+        var partitions = StorageManager.Partitions;
+        Partition? target = partitions.FirstOrDefault(p => string.Equals(p.Name, deviceName, StringComparison.OrdinalIgnoreCase));
+
+        if (target is null)
+        {
+            return PushResult(lua, false, $"block device '{deviceName}' not found");
+        }
+
+        try
+        {
+            // 3. Safely clean up collisions on that target mount path or partition
+            foreach (VfsMount existingMount in VfsManager.Mounts.ToList())
+            {
+                if (existingMount.MountPoint == mountPath || ReferenceEquals(existingMount.Partition, target))
+                {
+                    VfsManager.TryUnmount(existingMount.MountPoint);
+                }
+            }
+
+            // 4. Try mounting using the Gen 3 VfsManager matching your filesystem context
+            if (!VfsManager.TryMount("fat", target, MountFlags.None, mountPath, out VfsMount? mountedVolume) || mountedVolume is null)
+            {
+                return PushResult(lua, false, $"failed to mount block device {deviceName} at {mountPath}");
+            }
+
+            return PushResult(lua, true, $"successfully mounted at {mountedVolume.MountPoint}");
+        }
+        catch (Exception error)
+        {
+            return PushResult(lua, false, error.Message);
+        }
+    }
     public static int ListDirectory(ILuaState lua)
     {
         string path = ReadPath(lua, 1);

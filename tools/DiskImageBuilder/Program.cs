@@ -11,9 +11,9 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
-        if (args.Length != 6)
+        if (args.Length != 7)
         {
-            Console.Error.WriteLine("usage: DiskImageBuilder <image> <kernel.elf> <limine-dir> <lua-dir> <limine.conf> <x64|arm64>");
+            Console.Error.WriteLine("usage: DiskImageBuilder <image> <kernel.elf> <limine-dir> <lua-dir> <sysnk-dir> <limine.conf> <x64|arm64>");
             return 2;
         }
 
@@ -21,8 +21,9 @@ internal static class Program
         string kernelPath = Path.GetFullPath(args[1]);
         string limineDirectory = Path.GetFullPath(args[2]);
         string luaDirectory = Path.GetFullPath(args[3]);
-        string limineConfigPath = Path.GetFullPath(args[4]);
-        string architecture = args[5];
+        string sysnkDirectory = Path.GetFullPath(args[4]);
+        string limineConfigPath = Path.GetFullPath(args[5]);
+        string architecture = args[6];
 
         if (architecture is not ("x64" or "arm64"))
         {
@@ -32,7 +33,7 @@ internal static class Program
 
         Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
         string lfnSuffix = ChooseLfnSuffix(luaDirectory);
-        await CreateImageAsync(imagePath, kernelPath, limineDirectory, luaDirectory, limineConfigPath, architecture, lfnSuffix);
+        await CreateImageAsync(imagePath, kernelPath, limineDirectory, luaDirectory, sysnkDirectory, limineConfigPath, architecture, lfnSuffix);
         return 0;
     }
 
@@ -41,6 +42,7 @@ internal static class Program
         string kernelPath,
         string limineDirectory,
         string luaDirectory,
+        string sysnkDirectory,
         string limineConfigPath,
         string architecture,
         string lfnSuffix)
@@ -65,18 +67,20 @@ internal static class Program
         await using (FatVolume volume = await FatVolume.MountDiskAsync(disk, new FatVolumeOptions { LeaveOpen = true }))
         {
             await volume.CreateDirectoryAsync(ToStagedPath("/sys", lfnSuffix));
-            await volume.CreateDirectoryAsync(ToStagedPath("/uprog", lfnSuffix));
+            await volume.CreateDirectoryAsync(ToStagedPath("/prog", lfnSuffix));
+            await volume.CreateDirectoryAsync(ToStagedPath("/prog/sys", lfnSuffix));
+            await volume.CreateDirectoryAsync(ToStagedPath("/prog/user", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/user", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/boot/limine", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/EFI/BOOT", lfnSuffix));
 
             await CopyFileAsync(volume, kernelPath, ToStagedPath("/sys/xsnkrnl", lfnSuffix));
-            await CreateEmptyFileAsync(volume, ToStagedPath("/sys/reg.ini", lfnSuffix));
             await CreateEmptyFileAsync(volume, ToStagedPath("/sys/installer.flag", lfnSuffix));
             await CopyFileAsync(volume, limineConfigPath, ToStagedPath("/boot/limine/limine.conf", lfnSuffix));
             await CopyFileAsync(volume, Path.Combine(limineDirectory, "limine-bios.sys"), ToStagedPath("/boot/limine/limine-bios.sys", lfnSuffix));
-
             await CopyFileAsync(volume, Path.Combine(limineDirectory, efiFile), ToStagedPath($"/EFI/BOOT/{efiFile}", lfnSuffix));
+
+            await CopySysnkFilesAsync(volume, sysnkDirectory, lfnSuffix);
             await CopyLuaFilesAsync(volume, luaDirectory, lfnSuffix);
             await volume.FlushAsync();
         }
@@ -87,7 +91,7 @@ internal static class Program
         await using FatVolume verifiedVolume = await FatVolume.MountDiskAsync(
             disk,
             new FatVolumeOptions { LeaveOpen = true });
-        await VerifyImageAsync(verifiedVolume, kernelPath, limineDirectory, limineConfigPath, luaDirectory, efiFile);
+        await VerifyImageAsync(verifiedVolume, kernelPath, limineDirectory, limineConfigPath, luaDirectory, sysnkDirectory, efiFile);
     }
 
     private static string ChooseLfnSuffix(string luaDirectory)
@@ -415,9 +419,10 @@ internal static class Program
         string limineDirectory,
         string limineConfigPath,
         string luaDirectory,
+        string sysnkDirectory,
         string efiFile)
     {
-        string[] directories = { "/sys", "/uprog", "/user", "/boot/limine", "/EFI/BOOT" };
+        string[] directories = { "/sys", "/prog", "/prog/sys", "/prog/user", "/user", "/boot/limine", "/EFI/BOOT" };
         foreach (string directory in directories)
         {
             if (await volume.GetEntryAsync(directory) is null)
@@ -434,6 +439,14 @@ internal static class Program
             (Path.Combine(limineDirectory, efiFile), $"/EFI/BOOT/{efiFile}"),
         };
 
+        foreach (string sourcePath in Directory.Exists(sysnkDirectory)
+            ? Directory.EnumerateFiles(sysnkDirectory, "*", SearchOption.AllDirectories)
+            : Array.Empty<string>())
+        {
+            string relativePath = Path.GetRelativePath(sysnkDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
+            files.Add((sourcePath, $"/sys/{relativePath}"));
+        }
+
         foreach (string sourcePath in Directory.Exists(luaDirectory)
             ? Directory.EnumerateFiles(luaDirectory, "*", SearchOption.AllDirectories)
             : Array.Empty<string>())
@@ -444,7 +457,7 @@ internal static class Program
             }
 
             string relativePath = Path.GetRelativePath(luaDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
-            files.Add((sourcePath, $"/uprog/{relativePath}"));
+            files.Add((sourcePath, $"/prog/sys/{relativePath}"));
         }
 
         foreach ((string source, string destination) in files)
@@ -456,40 +469,54 @@ internal static class Program
             }
         }
 
-        var registry = await volume.GetEntryAsync("/sys/reg.ini");
-        if (registry is null || registry.Length != 0)
+        if (await volume.GetEntryAsync("/sys/installer.flag") is null)
         {
-            throw new InvalidDataException("/sys/reg.ini must exist and be empty.");
+            throw new InvalidDataException("Installer media marker is missing.");
         }
-
-            if (await volume.GetEntryAsync("/sys/installer.flag") is null)
-            {
-                throw new InvalidDataException("Installer media marker is missing.");
-            }
     }
 
-    private static async Task CopyLuaFilesAsync(FatVolume volume, string sourceDirectory, string lfnSuffix)
+    private static async Task CopySysnkFilesAsync(FatVolume volume, string sysnkDirectory, string lfnSuffix)
     {
-        if (!Directory.Exists(sourceDirectory))
+        if (!Directory.Exists(sysnkDirectory))
         {
             return;
         }
 
-        foreach (string directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (string directory in Directory.EnumerateDirectories(sysnkDirectory, "*", SearchOption.AllDirectories))
         {
-            string relativePath = Path.GetRelativePath(sourceDirectory, directory).Replace(Path.DirectorySeparatorChar, '/');
-            await volume.CreateDirectoryAsync(ToStagedPath($"/uprog/{relativePath}", lfnSuffix));
+            string relativePath = Path.GetRelativePath(sysnkDirectory, directory).Replace(Path.DirectorySeparatorChar, '/');
+            await volume.CreateDirectoryAsync(ToStagedPath($"/sys/{relativePath}", lfnSuffix));
         }
 
-        foreach (string sourcePath in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (string sourcePath in Directory.EnumerateFiles(sysnkDirectory, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(sysnkDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
+            await CopyFileAsync(volume, sourcePath, ToStagedPath($"/sys/{relativePath}", lfnSuffix));
+        }
+    }
+
+    private static async Task CopyLuaFilesAsync(FatVolume volume, string luaDirectory, string lfnSuffix)
+    {
+        if (!Directory.Exists(luaDirectory))
+        {
+            return;
+        }
+
+        foreach (string directory in Directory.EnumerateDirectories(luaDirectory, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(luaDirectory, directory).Replace(Path.DirectorySeparatorChar, '/');
+            await volume.CreateDirectoryAsync(ToStagedPath($"/prog/sys/{relativePath}", lfnSuffix));
+        }
+
+        foreach (string sourcePath in Directory.EnumerateFiles(luaDirectory, "*", SearchOption.AllDirectories))
         {
             if (Path.GetFileName(sourcePath) == ".gitkeep")
             {
                 continue;
             }
 
-            string relativePath = Path.GetRelativePath(sourceDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
-            await CopyFileAsync(volume, sourcePath, ToStagedPath($"/uprog/{relativePath}", lfnSuffix));
+            string relativePath = Path.GetRelativePath(luaDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
+            await CopyFileAsync(volume, sourcePath, ToStagedPath($"/prog/sys/{relativePath}", lfnSuffix));
         }
     }
 
