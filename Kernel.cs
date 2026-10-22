@@ -15,13 +15,12 @@ namespace XSNOS;
 
 public class Kernel : Sys.Kernel
 {
-    public static string ver = "26.10";
+    public static string ver = "2.1.0";
 
     protected override void BeforeRun()
     {
-        Console.WriteLine("XSNOS{0} OK",ver);
+        Console.WriteLine("xsnkrnl {0} OK",ver);
         FatFileSystemType fat = new();
-
         if (!VfsManager.RegisterFileSystem("fat", fat))
         {
             Console.WriteLine("The name \"fat\" is already registered.");
@@ -83,39 +82,7 @@ public class Kernel : Sys.Kernel
 
     protected override void Run()
     {
-        Console.Write(Directory.GetCurrentDirectory() + "> ");
-        var input = Console.ReadLine();
-
-        if (string.IsNullOrEmpty(input))
-            return;
-
-        string trimmed = input.TrimStart();
-        int spaceIdx = trimmed.IndexOf(' ');
-        string commandToken = spaceIdx < 0 ? trimmed : trimmed.Substring(0, spaceIdx);
-        string cmd = commandToken.ToLowerInvariant();
-        string argsString = spaceIdx < 0 ? string.Empty : trimmed.Substring(spaceIdx + 1).Trim();
-
-        switch (cmd)
-        {
-            case "clear":
-                Console.Clear();
-                break;
-
-            case "hltpc":
-                Console.WriteLine("flushing disks...");
-                ShutdownStorage();
-                Console.WriteLine("halting pc...");
-                Stop();
-                break;
-
-            case "luash":
-                CmdLuaShell(argsString);
-                break;
-
-            default:
-                CmdExeDefault(commandToken, argsString);
-                break;
-        }
+        CmdExeDefault("/sys/xsnis.lua",string.Empty);
     }
 
     private void ShutdownStorage()
@@ -446,12 +413,7 @@ public class Kernel : Sys.Kernel
 
     private static string ResolveLuaCommand(string commandToken)
     {
-        string path = commandToken.StartsWith('/') ? commandToken : "/uprog/" + commandToken;
-        if (File.Exists(path))
-        {
-            return path;
-        }
-        return Path.HasExtension(path) ? path : path + ".lua";
+        return commandToken;
     }
 
     private static string[] SplitArguments(string arguments)

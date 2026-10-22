@@ -1,21 +1,10 @@
--- shell.lua
--- xsnos2 shell
--- called by init as: shell(username, path)
-
-local username = arg[0] or "user"
-local path     = arg[1] or { [1] = "/prog/sys", [2] = "/prog/usr" }
-
--- if loaded via shell(user, path) from init, grab the real args
--- loadfile + call passes varargs, so:
+local username, path
 do
     local a, b = ...
-    if a then username = a end
-    if b then path = b end
+    username = a or "user"
+    path = b or { [1] = "/prog/sys", [2] = "/prog/usr" }
 end
 
--- ── helpers ───────────────────────────────────────────────────────────────────
-
--- strip trailing slash from path entries once
 local clean_path = {}
 for k, v in pairs(path) do
     clean_path[k] = v:gsub("/$", "")
@@ -26,15 +15,12 @@ local function prompt()
     io.write(string.format("xsnos:%s$%s > ", username, cwd))
 end
 
--- parse a raw input line into ucmd table
--- "foo arg1 arg2 arg3" -> { cmd="foo", arg0="arg1", arg1="arg2", ... }
 local function parse_cmd(line)
     local parts = {}
     for token in line:gmatch("%S+") do
         parts[#parts+1] = token
     end
     if #parts == 0 then return nil end
-
     local ucmd = { cmd = parts[1] }
     for i = 2, #parts do
         ucmd["arg" .. (i - 2)] = parts[i]
@@ -42,65 +28,71 @@ local function parse_cmd(line)
     return ucmd
 end
 
--- search path for cmd, return full filepath or nil
-local function find_cmd(cmd)
-    for _, dir in pairs(clean_path) do
-        local fullpath = dir .. "/" .. cmd .. ".lua"
-        -- try to loadfile; if it returns a function the file exists
-        local chunk, err = loadfile(fullpath)
-        if chunk then return fullpath, chunk end
-    end
-    return nil, nil
+local function file_exists(path)
+    local f = io.open(path, "r")
+    if f then f:close() return true end
+    return false
 end
 
--- ── built-ins ─────────────────────────────────────────────────────────────────
+local function find_cmd(cmd)
+    if cmd:match("^/") or cmd:match("^%.") then
+        local p = cmd
+        if not p:match("%.lua$") then p = p .. ".lua" end
+        if file_exists(p) then
+            local chunk, err = loadfile(p)
+            return p, chunk, err
+        end
+        return nil, nil, "file not found: " .. p
+    end
+
+    for _, dir in pairs(clean_path) do
+        local p = dir .. "/" .. cmd .. ".lua"
+        if file_exists(p) then
+            local chunk, err = loadfile(p)
+            return p, chunk, err
+        end
+    end
+    return nil, nil, nil
+end
 
 local builtins = {}
 
-builtins["cd"] = function(ucmd)
-    local target = ucmd["arg0"] or "/"
-    sys_chdir(target)
-end
-
-builtins["exit"] = function(_)
-    print("Goodbye.")
+builtins["extsh"] = function(_)
+    print("cya.")
     os.exit(0)
 end
 
--- ── main loop ─────────────────────────────────────────────────────────────────
-
 sys_clear()
-print(string.format("XSNOS2 shell  |  logged in as %s", username))
-print("Type 'exit' to quit.")
+print(string.format("XSNOS2 26.10, logged in as %s", username))
+print("type 'extsh' to quit.")
 print()
 
 while true do
     prompt()
     local line = io.read("l")
 
-    -- handle nil (EOF)
     if not line then
         print()
         break
     end
 
-    line = line:match("^%s*(.-)%s*$") -- trim
+    line = line:match("^%s*(.-)%s*$")
     if line == "" then
-        -- nothing typed, loop
     elseif builtins[line:match("^(%S+)")] then
         local ucmd = parse_cmd(line)
         builtins[ucmd.cmd](ucmd)
     else
         local ucmd = parse_cmd(line)
         if ucmd then
-            local fullpath, chunk = find_cmd(ucmd.cmd)
+            local fullpath, chunk, err = find_cmd(ucmd.cmd)
             if not fullpath then
                 print("E: file non-existant or not a lua file")
+            elseif not chunk then
+                print("E: " .. tostring(err))
             else
-                -- pass ucmd as the first argument to the program
-                local ok, err = pcall(chunk, ucmd)
+                local ok, runerr = pcall(chunk, ucmd)
                 if not ok then
-                    print("E: " .. tostring(err))
+                    print("E: " .. tostring(runerr))
                 end
             end
         end

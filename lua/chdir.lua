@@ -1,4 +1,6 @@
-local path = arg[1]
+local ucmd = ...
+local path = ucmd and ucmd.arg0
+
 if path == nil or path == "" then
     print(sys_cwd())
     return

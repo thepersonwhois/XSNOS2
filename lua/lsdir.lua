@@ -1,4 +1,5 @@
-local path = arg[1] or sys_cwd()
+local ucmd = ...
+local path = ucmd.arg0 or sys_cwd()
 local entries, err = sys_listdir(path)
 if entries == nil then
     print("lsdir: " .. tostring(err))

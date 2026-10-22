@@ -1,22 +1,21 @@
 local function file_exists(path)
-    local entries = sys_listdir(path:match("^(.*)/[^/]*$") or "/")
-    if not entries then return false end
+    local dir = path:match("^(.*)/[^/]*$") or "/"
     local name = path:match("[^/]+$")
+    local entries = sys_listdir(dir)
+    if not entries then return false end
     for _, e in ipairs(entries) do
         if e.name == name and e.kind == "file" then return true end
     end
     return false
 end
+
 local function parse_ini(path)
-    -- read by loading as a chunk is not possible, so we use sys_listdir trick;
-    -- instead we rely on the fact that loadfile can load lua, not ini.
-    -- We'll open with io.open (stock lua 5.5, should work).
     local f = io.open(path, "r")
     if not f then return nil end
     local result = {}
     local section = nil
-    for line in f:lines() do
-        line = line:match("^%s*(.-)%s*$") -- trim
+    for raw in f:lines() do
+        local line = raw:match("^%s*(.-)%s*$")
         if line:match("^%[.+%]$") then
             section = line:match("^%[(.+)%]$")
             result[section] = result[section] or {}
@@ -46,7 +45,6 @@ local function mount_all()
     local devs = sys_lsdev()
     if not devs then return end
     for _, dev in ipairs(devs) do
-        -- mount each device under /mnt/<devname>
         local mountpoint = "/mnt/" .. dev
         sys_mkdir(mountpoint)
         sys_mount(dev, mountpoint)
@@ -54,7 +52,6 @@ local function mount_all()
 end
 
 mount_all()
-
 
 local pass_path = "/sys/pass.ini"
 local reg_path  = "/sys/reg.ini"
@@ -64,26 +61,22 @@ local have_reg  = file_exists(reg_path)
 
 if not have_pass or not have_reg then
     sys_clear()
-    print("welcome to XSNOS2 26.10.")
-    print("this is the first boot setup.")
-    print("this will be transferred over after an install.")
+    print("welcome to xsnos2, make a user.")
+    print(" ")
 
     local username = input("Username: ")
     local password = input("Password: ")
 
-    local pass_contents = string.format("[%s]\npassword=%s\n", username, password)
     sys_mkdir("/sys")
-    write_file(pass_path, pass_contents)
+    write_file(pass_path, string.format("[%s]\npassword=%s\n", username, password))
     have_pass = true
 
-    print("user created. welcome.")
+    print("user made, have fun.")
 end
 
 local path = {}
-
 local reg = parse_ini(reg_path)
 
--- check if [PATH] section has at least one numeric key
 local path_ok = false
 if reg and reg["PATH"] then
     for k, _ in pairs(reg["PATH"]) do
@@ -95,7 +88,6 @@ if reg and reg["PATH"] then
 end
 
 if path_ok then
-    -- collect all numeric keys in order
     local keys = {}
     for k, _ in pairs(reg["PATH"]) do
         if tonumber(k) then keys[#keys+1] = tonumber(k) end
@@ -105,9 +97,7 @@ if path_ok then
         path[k] = reg["PATH"][tostring(k)]
     end
 else
-    -- write defaults
-    local reg_contents = "[PATH]\n1=/prog/sys\n2=/prog/usr\n"
-    write_file(reg_path, reg_contents)
+    write_file(reg_path, "[PATH]\n1=/prog/sys\n2=/prog/usr\n")
     path[1] = "/prog/sys"
     path[2] = "/prog/usr"
 end
@@ -116,8 +106,8 @@ local logged_in_user = nil
 
 if have_pass then
     sys_clear()
-    print("XSNOS2 Login")
-    print("────────────")
+    print("XSNOS2 26.10")
+    print(" ")
     local pass_data = parse_ini(pass_path)
     for attempt = 1, 3 do
         local uname = input("Username: ")
@@ -126,18 +116,18 @@ if have_pass then
             logged_in_user = uname
             break
         else
-            print("Invalid credentials.")
+            print("invalid credentials.")
         end
     end
     if not logged_in_user then
-        print("Too many failed attempts. Halting.")
+        print("too many failed attempts. no more xsnos2 for you.")
         while true do sys_readkey() end
     end
 end
 
 sys_clear()
 
-local shell, err = loadfile("/prog/sys/xsnsh.lua")
+local shell, err = loadfile("/sys/xsnsh.lua")
 if not shell then
     print("E: could not load shell: " .. tostring(err))
     while true do sys_readkey() end

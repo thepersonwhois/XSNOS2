@@ -1,4 +1,5 @@
-local path = arg[1]
+local ucmd = ...
+local path = ucmd.arg0
 if path == nil or path == "" then
     print("usage: mkdir </path>")
     return
