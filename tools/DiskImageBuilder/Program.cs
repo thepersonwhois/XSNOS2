@@ -5,7 +5,7 @@ using OutWit.Common.Fat.Model;
 
 internal static class Program
 {
-    private const long ImageSize = 2L * 1024 * 1024 * 1024;
+    private const long ImageSize = 1L * 1024 * 1024 * 1024;
     private const int SectorSize = 512;
     private const string DefaultLfnSuffix = "__xsnos_lfn";
 
