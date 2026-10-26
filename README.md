@@ -26,12 +26,10 @@
   <li>sys_mkdir(path), sys_chdir(path), sys_remove(path, recursive), sys_copy(source, destination) - these do exactly what you think they do.</li>
   <li>sys_partitions() - lists parts as a table. {index, name, blocks, block_size, host}</li>
   <li>sys_mkfat(index, label, type) - makes fat.</li>
-  <li>sys_prtinfo() - returns {name, block_count, block_size, scheme} for the primary disk. scheme is gpt, mbr, or raw (like republicans like their meat)</li>
+  <li>sys_prtinfo() - returns {name, block_count, block_size, scheme} for the primary disk. scheme is gpt, mbr, or raw</li>
   <li>sys_prtscheme(choice) - sets partition scheme. 1 gpt 2 mbr 3 keep same</li>
   <li>sys_partition(start,count) - make a partition. returns sucess,message</li>
   <li>sys_lsdev() - lists block devices. it's a table.</li>
-  <li>sys_installer_disks() - returns a table of disks. {index, name, size_gib, is_boot}, returns nil if it can't tell if it's a boot disk or not</li>
-  <li>sys_install(diskname) - does what it says on the tin, installs XSNOS2.</li>
 </ul>
 <p>the non-working lua functions are</p>
 <ul>

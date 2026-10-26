@@ -22,7 +22,7 @@ local function main()
     elseif disk.scheme == "mbr" then
         print("found good ol' MBR.")
     else
-        print("no partition table (raw, like republicans like their meat).")
+        print("no partition table (raw).")
     end
 
     print("\n[1] create GUID partition table")
@@ -45,7 +45,7 @@ local function main()
         print(scheme_message)
     end
 
-    print("\n--- partition sizing ---")
+    print("\npartition sizing")
     local start_sector = read_integer("enter start sector (standard default is 2048 for some reason): ")
     if start_sector == nil then
         print("invalid number.")
