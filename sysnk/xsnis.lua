@@ -106,7 +106,7 @@ local logged_in_user = nil
 
 if have_pass then
     sys_clear()
-    print("XSNOS2 26.10")
+    print("XSNOS2 26.11")
     print(" ")
     local pass_data = parse_ini(pass_path)
     for attempt = 1, 3 do
