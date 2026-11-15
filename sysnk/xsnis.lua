@@ -97,7 +97,7 @@ if path_ok then
         path[k] = reg["PATH"][tostring(k)]
     end
 else
-    write_file(reg_path, "[PATH]\n1=/prog/sys\n2=/prog/usr\n")
+    write_file(reg_path, "[PATH]\n1=/prog/sys\n2=/prog/user\n")
     path[1] = "/prog/sys"
     path[2] = "/prog/user"
 end
