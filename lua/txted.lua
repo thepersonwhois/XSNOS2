@@ -1,12 +1,12 @@
+local ucmd = ...
+
 local function fit(text, width)
     text = string.sub(text, 1, width)
     return text .. string.rep(" ", math.max(0, width - #text))
 end
 
 local function main()
-    io.write("txted2 path: ")
-    io.flush()
-    local path = io.read("*l")
+    local path = ucmd.arg0
     if path == nil or path == "" then
         return
     end
