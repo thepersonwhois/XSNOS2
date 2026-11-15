@@ -1,7 +1,7 @@
 print("commands:")
 print("  hlpcm  - you're... looking at it.")
 print("  clear  - clears.")
-print("  hltpc  - halts the processor.")
+print("  wm     - window manager.")
 print("  lsdev  - lists block devices")
 print("  lsdir  - ls, but 5 letters")
 print("  mkprt  - partition a disk")

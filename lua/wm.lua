@@ -517,7 +517,7 @@ local function draw_menu()
     local menu = menu_bounds()
     draw_rect(menu.x, menu.y, menu.w, menu.h, { 14, 18, 27 })
     draw_rect(menu.x, menu.y, menu.w, 34, BLUE)
-    draw_text(menu.x + 10, menu.y + 1, "Applications", WHITE)
+    draw_text(menu.x + 10, menu.y + 1, "Programs", WHITE)
     local visible = math.max(0, math.floor((menu.h - 40) / 36))
     local last = math.min(#applications, menu_scroll + visible)
     local y = menu.y + 40
