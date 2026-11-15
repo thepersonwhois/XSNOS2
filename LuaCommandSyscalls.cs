@@ -10,10 +10,10 @@ namespace XSNOS;
 
 internal static class LuaCommandSyscalls
 {
-        public static int MountDrive(ILuaState lua)
+    public static int MountDrive(ILuaState lua, LuaInterpreter interpreter)
     {
         string deviceName = LuaText.Decode(lua.ToString(1) ?? string.Empty);
-        string mountPath = ReadPath(lua, 2);
+        string mountPath = ReadPath(lua, 2, interpreter);
 
         if (string.IsNullOrWhiteSpace(deviceName))
         {
@@ -57,9 +57,10 @@ internal static class LuaCommandSyscalls
             return PushResult(lua, false, error.Message);
         }
     }
-    public static int ListDirectory(ILuaState lua)
+
+    public static int ListDirectory(ILuaState lua, LuaInterpreter interpreter)
     {
-        string path = ReadPath(lua, 1);
+        string path = ReadPath(lua, 1, interpreter);
         try
         {
             if (!Directory.Exists(path))
@@ -105,11 +106,11 @@ internal static class LuaCommandSyscalls
         }
     }
 
-    public static int MakeDirectory(ILuaState lua)
+    public static int MakeDirectory(ILuaState lua, LuaInterpreter interpreter)
     {
         try
         {
-            Directory.CreateDirectory(ReadPath(lua, 1));
+            Directory.CreateDirectory(ReadPath(lua, 1, interpreter));
             return PushResult(lua, true, "created");
         }
         catch (Exception error)
@@ -118,17 +119,17 @@ internal static class LuaCommandSyscalls
         }
     }
 
-    public static int ChangeDirectory(ILuaState lua)
+    public static int ChangeDirectory(ILuaState lua, LuaInterpreter interpreter)
     {
         try
         {
-            string path = ReadPath(lua, 1);
+            string path = ReadPath(lua, 1, interpreter);
             if (!Directory.Exists(path))
             {
                 return PushResult(lua, false, "no such directory");
             }
-            Directory.SetCurrentDirectory(path);
-            return PushResult(lua, true, Directory.GetCurrentDirectory());
+            interpreter.WorkingDirectory = path;
+            return PushResult(lua, true, interpreter.WorkingDirectory);
         }
         catch (Exception error)
         {
@@ -136,9 +137,9 @@ internal static class LuaCommandSyscalls
         }
     }
 
-    public static int PathKind(ILuaState lua)
+    public static int PathKind(ILuaState lua, LuaInterpreter interpreter)
     {
-        string path = ReadPath(lua, 1);
+        string path = ReadPath(lua, 1, interpreter);
         if (Directory.Exists(path))
         {
             lua.PushString("dir");
@@ -154,11 +155,11 @@ internal static class LuaCommandSyscalls
         return 1;
     }
 
-    public static int RemovePath(ILuaState lua)
+    public static int RemovePath(ILuaState lua, LuaInterpreter interpreter)
     {
         try
         {
-            string path = ReadPath(lua, 1);
+            string path = ReadPath(lua, 1, interpreter);
             bool recursive = lua.ToBoolean(2);
             if (Directory.Exists(path))
             {
@@ -178,10 +179,10 @@ internal static class LuaCommandSyscalls
         }
     }
 
-    public static int CopyPath(ILuaState lua)
+    public static int CopyPath(ILuaState lua, LuaInterpreter interpreter)
     {
-        string source = ReadPath(lua, 1);
-        string destination = ReadPath(lua, 2);
+        string source = ReadPath(lua, 1, interpreter);
+        string destination = ReadPath(lua, 2, interpreter);
         try
         {
             if (Directory.Exists(source))
@@ -225,7 +226,7 @@ internal static class LuaCommandSyscalls
         return 1;
     }
 
-    public static int FormatFat(ILuaState lua)
+    public static int FormatFat(ILuaState lua, LuaInterpreter interpreter)
     {
         long indexValue = lua.ToInteger(1);
         string label = LuaText.Decode(lua.ToString(2) ?? string.Empty);
@@ -269,7 +270,7 @@ internal static class LuaCommandSyscalls
                 return PushResult(lua, false, "formatted, but could not mount at /");
             }
 
-            Directory.SetCurrentDirectory(mountedVolume.MountPoint);
+            interpreter.WorkingDirectory = mountedVolume.MountPoint;
             return PushResult(lua, true, "formatted and mounted at /");
         }
         catch (Exception error)
@@ -278,9 +279,18 @@ internal static class LuaCommandSyscalls
         }
     }
 
-    private static string ReadPath(ILuaState lua, int index)
+    private static string ReadPath(ILuaState lua, int index, LuaInterpreter interpreter)
     {
-        return LuaText.Decode(lua.ToString(index) ?? string.Empty);
+        string path = LuaText.Decode(lua.ToString(index) ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        string workingDirectory = interpreter.WorkingDirectory ?? Directory.GetCurrentDirectory();
+        return Path.IsPathRooted(path)
+            ? path
+            : Path.GetFullPath(Path.Combine(workingDirectory, path));
     }
 
     private static int PushResult(ILuaState lua, bool success, string message)

@@ -11,9 +11,9 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
-        if (args.Length != 7)
+        if (args.Length != 8)
         {
-            Console.Error.WriteLine("usage: DiskImageBuilder <image> <kernel.elf> <limine-dir> <lua-dir> <sysnk-dir> <limine.conf> <x64|arm64>");
+            Console.Error.WriteLine("usage: DiskImageBuilder <image> <kernel.elf> <limine-dir> <lua-dir> <luagui-dir> <sysnk-dir> <limine.conf> <x64|arm64>");
             return 2;
         }
 
@@ -21,9 +21,10 @@ internal static class Program
         string kernelPath = Path.GetFullPath(args[1]);
         string limineDirectory = Path.GetFullPath(args[2]);
         string luaDirectory = Path.GetFullPath(args[3]);
-        string sysnkDirectory = Path.GetFullPath(args[4]);
-        string limineConfigPath = Path.GetFullPath(args[5]);
-        string architecture = args[6];
+        string guiDirectory = Path.GetFullPath(args[4]);
+        string sysnkDirectory = Path.GetFullPath(args[5]);
+        string limineConfigPath = Path.GetFullPath(args[6]);
+        string architecture = args[7];
 
         if (architecture is not ("x64" or "arm64"))
         {
@@ -32,8 +33,8 @@ internal static class Program
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
-        string lfnSuffix = ChooseLfnSuffix(luaDirectory);
-        await CreateImageAsync(imagePath, kernelPath, limineDirectory, luaDirectory, sysnkDirectory, limineConfigPath, architecture, lfnSuffix);
+        string lfnSuffix = ChooseLfnSuffix(luaDirectory, guiDirectory);
+        await CreateImageAsync(imagePath, kernelPath, limineDirectory, luaDirectory, guiDirectory, sysnkDirectory, limineConfigPath, architecture, lfnSuffix);
         return 0;
     }
 
@@ -42,6 +43,7 @@ internal static class Program
         string kernelPath,
         string limineDirectory,
         string luaDirectory,
+        string guiDirectory,
         string sysnkDirectory,
         string limineConfigPath,
         string architecture,
@@ -70,6 +72,7 @@ internal static class Program
             await volume.CreateDirectoryAsync(ToStagedPath("/prog", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/prog/sys", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/prog/user", lfnSuffix));
+            await volume.CreateDirectoryAsync(ToStagedPath("/prog/gui", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/user", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/boot/limine", lfnSuffix));
             await volume.CreateDirectoryAsync(ToStagedPath("/EFI/BOOT", lfnSuffix));
@@ -82,6 +85,7 @@ internal static class Program
 
             await CopySysnkFilesAsync(volume, sysnkDirectory, lfnSuffix);
             await CopyLuaFilesAsync(volume, luaDirectory, lfnSuffix);
+            await CopyGuiFilesAsync(volume, guiDirectory, lfnSuffix);
             await volume.FlushAsync();
         }
 
@@ -91,15 +95,17 @@ internal static class Program
         await using FatVolume verifiedVolume = await FatVolume.MountDiskAsync(
             disk,
             new FatVolumeOptions { LeaveOpen = true });
-        await VerifyImageAsync(verifiedVolume, kernelPath, limineDirectory, limineConfigPath, luaDirectory, sysnkDirectory, efiFile);
+        await VerifyImageAsync(verifiedVolume, kernelPath, limineDirectory, limineConfigPath, luaDirectory, guiDirectory, sysnkDirectory, efiFile);
     }
 
-    private static string ChooseLfnSuffix(string luaDirectory)
+    private static string ChooseLfnSuffix(string luaDirectory, string guiDirectory)
     {
         string suffix = DefaultLfnSuffix;
         int attempt = 0;
 
-        while (Directory.Exists(luaDirectory) && Directory.EnumerateFileSystemEntries(luaDirectory, "*", SearchOption.AllDirectories)
+        while (new[] { luaDirectory, guiDirectory }
+            .Where(Directory.Exists)
+            .SelectMany(directory => Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories))
             .Any(path => Path.GetFileName(path).EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
         {
             suffix = DefaultLfnSuffix + (++attempt).ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -419,10 +425,11 @@ internal static class Program
         string limineDirectory,
         string limineConfigPath,
         string luaDirectory,
+        string guiDirectory,
         string sysnkDirectory,
         string efiFile)
     {
-        string[] directories = { "/sys", "/prog", "/prog/sys", "/prog/user", "/user", "/boot/limine", "/EFI/BOOT" };
+        string[] directories = { "/sys", "/prog", "/prog/sys", "/prog/user", "/prog/gui", "/user", "/boot/limine", "/EFI/BOOT" };
         foreach (string directory in directories)
         {
             if (await volume.GetEntryAsync(directory) is null)
@@ -458,6 +465,19 @@ internal static class Program
 
             string relativePath = Path.GetRelativePath(luaDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
             files.Add((sourcePath, $"/prog/sys/{relativePath}"));
+        }
+
+        foreach (string sourcePath in Directory.Exists(guiDirectory)
+            ? Directory.EnumerateFiles(guiDirectory, "*", SearchOption.AllDirectories)
+            : Array.Empty<string>())
+        {
+            if (Path.GetFileName(sourcePath) == ".gitkeep")
+            {
+                continue;
+            }
+
+            string relativePath = Path.GetRelativePath(guiDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
+            files.Add((sourcePath, $"/prog/gui/{relativePath}"));
         }
 
         foreach ((string source, string destination) in files)
@@ -517,6 +537,31 @@ internal static class Program
 
             string relativePath = Path.GetRelativePath(luaDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
             await CopyFileAsync(volume, sourcePath, ToStagedPath($"/prog/sys/{relativePath}", lfnSuffix));
+        }
+    }
+
+    private static async Task CopyGuiFilesAsync(FatVolume volume, string guiDirectory, string lfnSuffix)
+    {
+        if (!Directory.Exists(guiDirectory))
+        {
+            return;
+        }
+
+        foreach (string directory in Directory.EnumerateDirectories(guiDirectory, "*", SearchOption.AllDirectories))
+        {
+            string relativePath = Path.GetRelativePath(guiDirectory, directory).Replace(Path.DirectorySeparatorChar, '/');
+            await volume.CreateDirectoryAsync(ToStagedPath($"/prog/gui/{relativePath}", lfnSuffix));
+        }
+
+        foreach (string sourcePath in Directory.EnumerateFiles(guiDirectory, "*", SearchOption.AllDirectories))
+        {
+            if (Path.GetFileName(sourcePath) == ".gitkeep")
+            {
+                continue;
+            }
+
+            string relativePath = Path.GetRelativePath(guiDirectory, sourcePath).Replace(Path.DirectorySeparatorChar, '/');
+            await CopyFileAsync(volume, sourcePath, ToStagedPath($"/prog/gui/{relativePath}", lfnSuffix));
         }
     }
 

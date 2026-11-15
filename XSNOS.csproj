@@ -3,6 +3,10 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <CosmosEnableScheduler>true</CosmosEnableScheduler>
+    <CosmosEnableGraphics>true</CosmosEnableGraphics>
+    <CosmosEnableKeyboard>true</CosmosEnableKeyboard>
+    <CosmosEnableMouse>true</CosmosEnableMouse>
   </PropertyGroup>
 
   <!-- Core kernel packages -->
@@ -23,6 +27,7 @@
       <_DiskImageLimineDir>$([MSBuild]::NormalizePath('$(CosmosIntermediateOutputPath)', 'limine'))</_DiskImageLimineDir>
       <_DiskImageBuilderProject>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'tools', 'DiskImageBuilder', 'DiskImageBuilder.csproj'))</_DiskImageBuilderProject>
       <_DiskImageLua>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'lua'))</_DiskImageLua>
+      <_DiskImageGui>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'luagui'))</_DiskImageGui>
       <_DiskImageSysnk>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'sysnk'))</_DiskImageSysnk>
       <_DiskImageLimineConfig>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'Bootloader', 'disk-limine.conf'))</_DiskImageLimineConfig>
       <_DiskImageLimineTool>$([MSBuild]::NormalizePath('$(_DiskImageLimineDir)', 'limine'))</_DiskImageLimineTool>
@@ -33,7 +38,7 @@
     <Error Condition="!Exists('$(_DiskImageElf)')" Text="Kernel ELF not found: $(_DiskImageElf)" />
     <Error Condition="!Exists('$(_DiskImageLimineDir)')" Text="Limine files not found: $(_DiskImageLimineDir)" />
 
-    <Exec Command="dotnet run --project &quot;$(_DiskImageBuilderProject)&quot; --configuration Release --no-launch-profile -- &quot;$(_DiskImageOutput)&quot; &quot;$(_DiskImageElf)&quot; &quot;$(_DiskImageLimineDir)&quot; &quot;$(_DiskImageLua)&quot; &quot;$(_DiskImageSysnk)&quot; &quot;$(_DiskImageLimineConfig)&quot; &quot;$(CosmosArch)" />
+    <Exec Command="dotnet run --project &quot;$(_DiskImageBuilderProject)&quot; --configuration Release --no-launch-profile -- &quot;$(_DiskImageOutput)&quot; &quot;$(_DiskImageElf)&quot; &quot;$(_DiskImageLimineDir)&quot; &quot;$(_DiskImageLua)&quot; &quot;$(_DiskImageGui)&quot; &quot;$(_DiskImageSysnk)&quot; &quot;$(_DiskImageLimineConfig)&quot; &quot;$(CosmosArch)" />
     <Exec Condition="'$(CosmosArch)' == 'x64'" Command="&quot;$(_DiskImageLimineTool)&quot; bios-install &quot;$(_DiskImageOutput)&quot;" />
     <Message Importance="High" Text="Bootable FAT32 disk image created: $(_DiskImageOutput)" />
   </Target>

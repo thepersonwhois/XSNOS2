@@ -16,6 +16,7 @@ namespace XSNOS;
 public class Kernel : Sys.Kernel
 {
     public static string ver = "2.1.0";
+    private readonly LuaProcessManager _processManager = new();
 
     protected override void BeforeRun()
     {
@@ -85,11 +86,22 @@ public class Kernel : Sys.Kernel
         CmdExeDefault("/sys/xsnis.lua",string.Empty);
     }
 
-    private void ShutdownStorage()
+    private string? ShutdownStorage()
     {
+        List<string> errors = [];
         foreach (VfsMount m in VfsManager.Mounts.ToList())
         {
-            VfsManager.TryUnmount(m.MountPoint);
+            try
+            {
+                if (!VfsManager.TryUnmount(m.MountPoint))
+                {
+                    errors.Add($"failed to unmount {m.MountPoint}");
+                }
+            }
+            catch (Exception error)
+            {
+                errors.Add($"failed to unmount {m.MountPoint}: {error.Message}");
+            }
         }
 
         foreach (var device in StorageManager.Devices.ToList())
@@ -98,10 +110,13 @@ public class Kernel : Sys.Kernel
             {
                 device.Flush();
             }
-            catch
+            catch (Exception error)
             {
+                errors.Add($"failed to flush {device.Name}: {error.Message}");
             }
         }
+
+        return errors.Count == 0 ? null : string.Join("; ", errors);
     }
 
     private void CmdLuaShell(string arg)
@@ -142,11 +157,11 @@ public class Kernel : Sys.Kernel
         }
     }
 
-    private void CmdExeDefault(string commandToken, string argsString)
+    private LuaInterpreter CreateLuaInterpreter(string? workingDirectory = null)
     {
         LuaInterpreter lua = new()
         {
-            WorkingDirectory = Directory.GetCurrentDirectory(),
+            WorkingDirectory = workingDirectory ?? Directory.GetCurrentDirectory(),
         };
         void add(ILuaState inter, CSharpFunctionDelegate function, string name)
         {
@@ -180,7 +195,7 @@ public class Kernel : Sys.Kernel
         }
         int getCurrentDirectory(ILuaState luaSTS)
         {
-            luaSTS.PushString(Directory.GetCurrentDirectory());
+            luaSTS.PushString(lua.WorkingDirectory);
             return 1;
         }
         int listDevices(ILuaState luaSTS)
@@ -351,6 +366,38 @@ public class Kernel : Sys.Kernel
             }
             return 2;
         }
+        int spawnProcess(ILuaState luaSTS)
+        {
+            return _processManager.Spawn(luaSTS, lua.WorkingDirectory, CreateLuaInterpreter);
+        }
+        int listProcesses(ILuaState luaSTS)
+        {
+            return _processManager.List(luaSTS);
+        }
+        int waitProcess(ILuaState luaSTS)
+        {
+            return _processManager.Wait(luaSTS);
+        }
+        int shutdown(ILuaState luaSTS)
+        {
+            string? storageError = ShutdownStorage();
+            if (storageError is not null)
+            {
+                luaSTS.PushBoolean(false);
+                luaSTS.PushString(storageError);
+                return 2;
+            }
+
+            if (!Sys.Power.IsSupported)
+            {
+                luaSTS.PushBoolean(false);
+                luaSTS.PushString("platform does not support power-off");
+                return 2;
+            }
+
+            Sys.Power.Shutdown();
+            return 0;
+        }
         string CreateGpt(IBlockDevice disk)
         {
             Gpt.Create(disk);
@@ -361,6 +408,50 @@ public class Kernel : Sys.Kernel
             Mbr.Create(disk);
             return "created master boot record";
         }
+        var state = lua.State;
+        add(state,screenHeight,"sys_scrh");
+        add(state,screenWidth,"sys_scrw");
+        add(state,green,"sys_green");
+        add(state,notgreen,"sys_white");
+        add(state,getversion,"sys_ver");
+        add(state,listDevices,"sys_lsdev");
+        add(state,getCurrentDirectory,"sys_cwd");
+        add(state,sts => LuaCommandSyscalls.ListDirectory(sts, lua),"sys_listdir");
+        add(state,sts => LuaCommandSyscalls.MakeDirectory(sts, lua),"sys_mkdir");
+        add(state,sts => LuaCommandSyscalls.ChangeDirectory(sts, lua),"sys_chdir");
+        add(state,sts => LuaCommandSyscalls.PathKind(sts, lua),"sys_pathkind");
+        add(state,sts => LuaCommandSyscalls.RemovePath(sts, lua),"sys_remove");
+        add(state,sts => LuaCommandSyscalls.CopyPath(sts, lua),"sys_copy");
+        add(state,LuaCommandSyscalls.ListPartitions,"sys_partitions");
+        add(state,sts => LuaCommandSyscalls.FormatFat(sts, lua),"sys_mkfat");
+        add(state,readKey,"sys_readkey");
+        add(state,setCursorPosition,"sys_goto");
+        add(state,clearConsole,"sys_clear");
+        add(state,setCursorVisible,"sys_cursor");
+        add(state,writeAtAndMoveCursor,"sys_putat");
+        add(state,getPartitionInfo,"sys_prtinfo");
+        add(state,setPartitionScheme,"sys_prtscheme");
+        add(state,createPartition,"sys_partition");
+        add(state,sts => LuaCommandSyscalls.MountDrive(sts, lua),"sys_mount");
+        add(state,spawnProcess,"sys_spawn");
+        add(state,listProcesses,"sys_processes");
+        add(state,waitProcess,"sys_wait");
+        add(state,shutdown,"sys_shutdown");
+        add(state,LuaGraphicsSyscalls.Size,"sys_gui_size");
+        add(state,LuaGraphicsSyscalls.Clear,"sys_gui_clear");
+        add(state,LuaGraphicsSyscalls.Pixel,"sys_gui_pixel");
+        add(state,LuaGraphicsSyscalls.Line,"sys_gui_line");
+        add(state,LuaGraphicsSyscalls.Rectangle,"sys_gui_rect");
+        add(state,LuaGraphicsSyscalls.Text,"sys_gui_text");
+        add(state,LuaGraphicsSyscalls.Present,"sys_gui_present");
+        add(state,LuaGraphicsSyscalls.Wait,"sys_gui_wait");
+        add(state,LuaGraphicsSyscalls.ReadKey,"sys_gui_key");
+        add(state,LuaGraphicsSyscalls.ReadMouse,"sys_gui_mouse");
+        return lua;
+    }
+
+    private void CmdExeDefault(string commandToken, string argsString)
+    {
         if (string.IsNullOrWhiteSpace(commandToken))
         {
             Console.WriteLine("E: you typed nothing. no file or command.");
@@ -374,33 +465,9 @@ public class Kernel : Sys.Kernel
             return;
         }
 
+        using LuaInterpreter lua = CreateLuaInterpreter();
         try
         {
-            var state = lua.State;
-            add(state,screenHeight,"sys_scrh");
-            add(state,screenWidth,"sys_scrw");
-            add(state,green,"sys_green");
-            add(state,notgreen,"sys_white");
-            add(state,getversion,"sys_ver");
-            add(state,listDevices,"sys_lsdev");
-            add(state,getCurrentDirectory,"sys_cwd");
-            add(state,LuaCommandSyscalls.ListDirectory,"sys_listdir");
-            add(state,LuaCommandSyscalls.MakeDirectory,"sys_mkdir");
-            add(state,LuaCommandSyscalls.ChangeDirectory,"sys_chdir");
-            add(state,LuaCommandSyscalls.PathKind,"sys_pathkind");
-            add(state,LuaCommandSyscalls.RemovePath,"sys_remove");
-            add(state,LuaCommandSyscalls.CopyPath,"sys_copy");
-            add(state,LuaCommandSyscalls.ListPartitions,"sys_partitions");
-            add(state,LuaCommandSyscalls.FormatFat,"sys_mkfat");
-            add(state,readKey,"sys_readkey");
-            add(state,setCursorPosition,"sys_goto");
-            add(state,clearConsole,"sys_clear");
-            add(state,setCursorVisible,"sys_cursor");
-            add(state,writeAtAndMoveCursor,"sys_putat");
-            add(state,getPartitionInfo,"sys_prtinfo");
-            add(state,setPartitionScheme,"sys_prtscheme");
-            add(state,createPartition,"sys_partition");
-            add(state,LuaCommandSyscalls.MountDrive,"sys_mount");
             lua.DoFile(real, SplitArguments(argsString));
         }
         catch (LuaException e)

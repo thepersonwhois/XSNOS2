@@ -1,18 +1,24 @@
-local username, path
+local username, path, options
 do
-    local a, b = ...
+    local a, b, c = ...
     username = a or "user"
     path = b or { [1] = "/prog/sys", [2] = "/prog/usr" }
+    options = c or {}
 end
+local gui_mode = options.gui == true
+local exiting = false
 
 local clean_path = {}
 for k, v in pairs(path) do
     clean_path[k] = v:gsub("/$", "")
 end
 
+local function prompt_text()
+    return string.format("xsnos:%s$%s > ", username, sys_cwd())
+end
+
 local function prompt()
-    local cwd = sys_cwd()
-    io.write(string.format("xsnos:%s$%s > ", username, cwd))
+    io.write(prompt_text())
 end
 
 local function parse_cmd(line)
@@ -59,23 +65,21 @@ local builtins = {}
 
 builtins["extsh"] = function(_)
     print("cya.")
-    os.exit(0)
+    if gui_mode then
+        exiting = true
+    else
+        os.exit(0)
+    end
 end
 
-sys_clear()
+if not gui_mode then
+    sys_clear()
+end
 print(string.format("XSNOS2 26.10, logged in as %s", username))
 print("type 'extsh' to quit.")
 print()
 
-while true do
-    prompt()
-    local line = io.read("l")
-
-    if not line then
-        print()
-        break
-    end
-
+local function run_line(line)
     line = line:match("^%s*(.-)%s*$")
     if line == "" then
     elseif builtins[line:match("^(%S+)")] then
@@ -84,6 +88,8 @@ while true do
     else
         local ucmd = parse_cmd(line)
         if ucmd then
+            ucmd.username = username
+            ucmd.path = clean_path
             local fullpath, chunk, err = find_cmd(ucmd.cmd)
             if not fullpath then
                 print("E: file non-existant or not a lua file")
@@ -97,4 +103,26 @@ while true do
             end
         end
     end
+    return exiting
+end
+
+if gui_mode then
+    return {
+        run_line = run_line,
+        prompt = prompt_text,
+        username = username,
+        path = clean_path,
+    }
+end
+
+while true do
+    prompt()
+    local line = io.read("l")
+
+    if not line then
+        print()
+        break
+    end
+
+    run_line(line)
 end
