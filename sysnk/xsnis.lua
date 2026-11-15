@@ -99,7 +99,7 @@ if path_ok then
 else
     write_file(reg_path, "[PATH]\n1=/prog/sys\n2=/prog/usr\n")
     path[1] = "/prog/sys"
-    path[2] = "/prog/usr"
+    path[2] = "/prog/user"
 end
 
 local logged_in_user = nil
