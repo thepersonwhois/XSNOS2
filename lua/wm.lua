@@ -456,7 +456,18 @@ local function handle_mouse()
     local pressed = left and not previous_mouse.left
     local released = not left and previous_mouse.left
 
-    if pressed then handle_click(x, y) end
+    if pressed then
+        local target = hit_window(x, y)
+        local blocked = menu_open or (target and target.error) or y < BAR_HEIGHT
+
+        handle_click(x, y)
+
+        if target and not blocked and not interaction and not target.error
+            and not target.minimized and contains(client_rect(target), x, y) then
+            interaction = { kind = "client", win = target, x = x, y = y }
+        end
+    end
+
     if interaction and left then
         local win = interaction.win
         if interaction.kind == "move" then
@@ -465,52 +476,33 @@ local function handle_mouse()
         elseif interaction.kind == "resize" then
             win.w = clamp(interaction.w + x - interaction.x, MIN_WIDTH, math.max(MIN_WIDTH, screen_width - win.x))
             win.h = clamp(interaction.h + y - interaction.y, MIN_HEIGHT, math.max(MIN_HEIGHT, screen_height - win.y))
+        elseif interaction.kind == "client" and not pressed
+            and (x ~= interaction.x or y ~= interaction.y) then
+            -- button held and mouse moved: drag event
+            interaction.x, interaction.y = x, y
+            if win.on_mouse and not win.error then
+                local client = client_rect(win)
+                local ok, err = pcall(win.on_mouse, x - client.x, y - client.y, true, win)
+                if not ok then win.error = tostring(err) end
+            end
         end
     end
-    if released then interaction = nil end
+
+    if released then
+        if interaction and interaction.kind == "client" then
+            local win = interaction.win
+            if win.on_mouse and not win.error then
+                local client = client_rect(win)
+                local ok, err = pcall(win.on_mouse, x - client.x, y - client.y, false, win)
+                if not ok then win.error = tostring(err) end
+            end
+        end
+        interaction = nil
+    end
 
     previous_mouse.x, previous_mouse.y, previous_mouse.left = x, y, left
 end
 
-local function handle_key()
-    local key, character, control = sys_gui_key()
-    if not key then return end
-    if menu_open then
-        if key == "UpArrow" then
-            menu_selection = math.max(1, menu_selection - 1)
-            if menu_selection <= menu_scroll then menu_scroll = menu_selection - 1 end
-        elseif key == "DownArrow" then
-            menu_selection = math.min(#applications, menu_selection + 1)
-            local visible = math.max(1, math.floor((screen_height - BAR_HEIGHT - 40) / 36))
-            if menu_selection > menu_scroll + visible then menu_scroll = menu_selection - visible end
-        elseif key == "Enter" and applications[menu_selection] then
-            launch_app(applications[menu_selection])
-        elseif key == "Escape" then
-            menu_open = false
-        end
-        return
-    end
-    if focused and focused.on_key then
-        local ok, err = pcall(focused.on_key, key, character, control, focused)
-        if not ok then focused.error = tostring(err) end
-    end
-end
-
-local function draw_top_bar()
-    draw_rect(0, 0, screen_width, BAR_HEIGHT, { 18, 23, 33 })
-    draw_rect(0, BAR_HEIGHT - 2, screen_width, 2, BLUE)
-    draw_rect(0, 0, 112, BAR_HEIGHT, menu_open and BLUE or { 36, 45, 60 })
-    draw_text(12, 2, "progs", WHITE)
-
-    local x = 240
-    for _, win in ipairs(windows) do
-        local width = math.min(200, math.max(112, (#win.title + 2) * 16))
-        draw_rect(x, 3, width, BAR_HEIGHT - 6, win == focused and BLUE or LIGHT)
-        local label = win.minimized and "[" .. win.title .. "]" or win.title
-        draw_text(x + 8, 2, label:sub(1, math.floor((width - 16) / 16)), WHITE)
-        x = x + width + 4
-    end
-end
 
 local function draw_menu()
     if not menu_open then return end
