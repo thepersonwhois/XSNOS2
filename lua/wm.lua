@@ -34,35 +34,27 @@ end
 
 local function wrap_text(text, columns)
     local lines = {}
-    local function append_paragraph(paragraph)
-        local current = ""
-        for word in paragraph:gmatch("%S+") do
-            local remaining = word
-            while #remaining > columns do
-                if #current > 0 then
-                    lines[#lines + 1] = current
-                    current = ""
-                end
-                lines[#lines + 1] = remaining:sub(1, columns)
-                remaining = remaining:sub(columns + 1)
+    for paragraph in (tostring(text) .. "\n"):gmatch("(.-)\n") do
+        paragraph = (paragraph:gsub("\t", "    "))
+        if #paragraph == 0 then
+            lines[#lines + 1] = ""
+        end
+        while #paragraph > 0 do
+            if #paragraph <= columns then
+                lines[#lines + 1] = paragraph
+                break
             end
-
-            if #remaining > 0 then
-                if #current > 0 and #current + 1 + #remaining > columns then
-                    lines[#lines + 1] = current
-                    current = remaining
-                elseif #current > 0 then
-                    current = current .. " " .. remaining
-                else
-                    current = remaining
-                end
+            local cut = columns
+            local space = paragraph:sub(1, columns + 1):match(".*() ")
+            if space and paragraph:sub(1, space - 1):find("%S") then
+                cut = space - 1
+                lines[#lines + 1] = paragraph:sub(1, cut)
+                paragraph = paragraph:sub(space + 1)
+            else
+                lines[#lines + 1] = paragraph:sub(1, cut)
+                paragraph = paragraph:sub(cut + 1)
             end
         end
-        lines[#lines + 1] = current
-    end
-
-    for paragraph in (tostring(text) .. "\n"):gmatch("(.-)\n") do
-        append_paragraph(paragraph)
     end
     return lines
 end
