@@ -57,7 +57,7 @@
     on_key = function(key, character, ctrl, window) end,
   })
 end</code></pre>
-<p>the drawing context uses window-local coordinates and provides <code>clear(color)</code>, <code>pixel(x,y,color)</code>, <code>line(x1,y1,x2,y2,color)</code>, <code>rect(x,y,w,h,color,filled)</code>, and <code>text(x,y,text,color)</code>. colors are RGB tables such as <code>{255, 255, 255}</code>; <code>gui.colors</code> includes white, black, blue, dark, and light. i somehow forgot medium spring green and am now too lazy to readd it. ::( mouse callbacks receive <code>x,y,pressed,window</code> in client-local coordinates. if you truly need an example just read the programs that i have made. the window object provides <code>minimize()</code>, <code>maximize()</code>, and <code>close()</code></p>
+<p>the drawing context uses window-local coordinates and provides <code>clear(color)</code>, <code>pixel(x,y,color)</code>, <code>line(x1,y1,x2,y2,color)</code>, <code>rect(x,y,w,h,color,filled)</code>, and <code>text(x,y,text,color)</code>. colors are RGB tables such as <code>{255, 255, 255}</code>; <code>gui.colors</code> includes white, black, blue, dark, and light. i somehow forgot medium spring green and am now too lazy to readd it. ::( mouse callbacks (on_mouse) receive <code>x,y,pressed,window</code> in client-local coordinates. if you truly need an example just read the programs that i have made. the window object provides <code>minimize()</code>, <code>maximize()</code>, and <code>close()</code></p>
 <p>the non-working lua functions are</p>
 <ul>
   <li>io.popen()</li>
