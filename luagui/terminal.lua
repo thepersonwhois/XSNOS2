@@ -27,6 +27,64 @@ return function(gui)
         scroll = 0
     end
 
+    local function wrap_input(text, columns)
+        local lines = {}
+        local current = ""
+
+        for word in tostring(text):gmatch("%S+") do
+            local remaining = word
+            while #remaining > columns do
+                if #current > 0 then
+                    lines[#lines + 1] = current
+                    current = ""
+                end
+                lines[#lines + 1] = remaining:sub(1, columns)
+                remaining = remaining:sub(columns + 1)
+            end
+
+            if #remaining > 0 then
+                if #current > 0 and #current + 1 + #remaining > columns then
+                    lines[#lines + 1] = current
+                    current = remaining
+                elseif #current > 0 then
+                    current = current .. " " .. remaining
+                else
+                    current = remaining
+                end
+            end
+        end
+
+        if #current > 0 or #lines == 0 then
+            lines[#lines + 1] = current
+        end
+        return lines
+    end
+
+    local function wrap_history_line(text, columns)
+        local lines = {}
+        local remaining = tostring(text)
+
+        while #remaining > columns do
+            local break_at = nil
+            for index = 1, columns do
+                if remaining:sub(index, index):match("%s") then
+                    break_at = index
+                end
+            end
+
+            if break_at then
+                lines[#lines + 1] = remaining:sub(1, break_at)
+                remaining = remaining:sub(break_at + 1)
+            else
+                lines[#lines + 1] = remaining:sub(1, columns)
+                remaining = remaining:sub(columns + 1)
+            end
+        end
+
+        lines[#lines + 1] = remaining
+        return lines
+    end
+
     local function draw(context)
         active_context = context
         context:clear({ 12, 16, 22 })
@@ -41,21 +99,41 @@ return function(gui)
         end
 
         local prompt = input_prompt or (shell and shell:prompt() or "")
-        local visible = math.max(1, math.floor(context.height / 32) - 1)
-        local last = math.max(1, #history - scroll)
-        local first = math.max(1, last - visible + 1)
+        local input_lines = wrap_input(prompt .. input .. (input_prompt and "_" or ""), math.max(1, math.floor((context.width - 8) / 16)))
+        local total_rows = math.max(1, math.floor(context.height / 32))
+        local input_rows = math.min(#input_lines, total_rows)
+        local history_rows = total_rows - input_rows
+        local columns = math.max(1, math.floor((context.width - 8) / 16))
+        local history_lines = {}
+        for _, line in ipairs(history) do
+            for _, wrapped_line in ipairs(wrap_history_line(line, columns)) do
+                history_lines[#history_lines + 1] = wrapped_line
+            end
+        end
+        if partial ~= "" then
+            for _, wrapped_line in ipairs(wrap_history_line(partial, columns)) do
+                history_lines[#history_lines + 1] = wrapped_line
+            end
+        end
+
+        scroll = math.min(scroll, math.max(0, #history_lines - history_rows))
+        local last = #history_lines - scroll
+        local first = math.max(1, last - history_rows + 1)
         local y = 0
 
         for index = first, last do
-            context:text(8, y, history[index], gui.colors.white)
-            y = y + 32
-        end
-        if partial ~= "" and y < context.height - 32 then
-            context:text(8, y, partial, gui.colors.white)
+            if history_rows > 0 and y < history_rows * 32 then
+                context:text(8, y, history_lines[index], gui.colors.white)
+                y = y + 32
+            end
         end
 
-        local line = prompt .. input .. (input_prompt and "_" or "")
-        context:text(8, context.height - 32, line, { 130, 210, 255 })
+        local first_input_line = #input_lines - input_rows + 1
+        local input_y = context.height - input_rows * 32
+        for index = first_input_line, #input_lines do
+            context:text(8, input_y, input_lines[index], { 130, 210, 255 })
+            input_y = input_y + 32
+        end
     end
 
     local function refresh_blocking_read()
@@ -84,7 +162,7 @@ return function(gui)
             elseif key == "Backspace" then
                 input = input:sub(1, -2)
             elseif key == "UpArrow" then
-                scroll = math.min(scroll + 1, math.max(0, #history - 1))
+                scroll = scroll + 1
             elseif key == "DownArrow" then
                 scroll = math.max(0, scroll - 1)
             elseif character and character ~= "" and not control then
@@ -261,7 +339,7 @@ return function(gui)
         elseif key == "Backspace" then
             input = input:sub(1, -2)
         elseif key == "UpArrow" then
-            scroll = math.min(scroll + 1, math.max(0, #history - 1))
+            scroll = scroll + 1
         elseif key == "DownArrow" then
             scroll = math.max(0, scroll - 1)
         elseif character and character ~= "" and not control then

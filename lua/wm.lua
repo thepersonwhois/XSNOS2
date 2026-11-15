@@ -34,8 +34,8 @@ end
 
 local function wrap_text(text, columns)
     local lines = {}
-    for paragraph in (tostring(text) .. "\n"):gmatch("(.-)\n") do
-        paragraph = (paragraph:gsub("\t", "    "))
+    for raw in (tostring(text) .. "\n"):gmatch("(.-)\n") do
+        local paragraph = (raw:gsub("\t", "    "))
         if #paragraph == 0 then
             lines[#lines + 1] = ""
         end
@@ -402,17 +402,10 @@ local function handle_click(x, y)
 
     local controls = window_controls(win)
     if contains(controls.close, x, y) then
-        for index, item in ipairs(windows) do
-            if item == win then table.remove(windows, index); break end
-        end
-        if focused == win then focused = windows[#windows] end
+        win:close()
         return
     elseif contains(controls.minimize, x, y) then
-        win.minimized = true
-        focused = nil
-        for index = #windows, 1, -1 do
-            if not windows[index].minimized then focused = windows[index]; break end
-        end
+        win:minimize()
         return
     elseif contains(controls.maximize, x, y) then
         toggle_maximize(win)
@@ -495,6 +488,53 @@ local function handle_mouse()
     previous_mouse.x, previous_mouse.y, previous_mouse.left = x, y, left
 end
 
+local function menu_visible_rows()
+    local menu = menu_bounds()
+    return math.max(1, math.floor((menu.h - 40) / 36))
+end
+
+local function handle_menu_key(key)
+    local name = tostring(key):lower()
+
+    if name == "escape" or name == "esc" then
+        menu_open = false
+        return
+    end
+
+    local count = #applications
+    if count == 0 then return end
+
+    if name == "uparrow" or name == "up" then
+        menu_selection = clamp(menu_selection - 1, 1, count)
+    elseif name == "downarrow" or name == "down" then
+        menu_selection = clamp(menu_selection + 1, 1, count)
+    elseif name == "enter" or name == "return" then
+        local app = applications[menu_selection]
+        if app then launch_app(app) end
+        return
+    end
+
+    local rows = menu_visible_rows()
+    if menu_selection <= menu_scroll then
+        menu_scroll = menu_selection - 1
+    elseif menu_selection > menu_scroll + rows then
+        menu_scroll = menu_selection - rows
+    end
+end
+
+local function handle_key()
+    while true do
+        local key, character, ctrl = sys_gui_key()
+        if key == nil then return end
+
+        if menu_open then
+            handle_menu_key(key)
+        elseif focused and not focused.minimized and not focused.error and focused.on_key then
+            local ok, err = pcall(focused.on_key, key, character, ctrl, focused)
+            if not ok then focused.error = tostring(err) end
+        end
+    end
+end
 
 local function draw_menu()
     if not menu_open then return end
@@ -513,11 +553,31 @@ local function draw_menu()
     if #applications == 0 then draw_text(menu.x + 10, menu.y + 42, "No Lua apps found", WHITE) end
 end
 
+local function draw_top_bar()
+    draw_rect(0, 0, screen_width, BAR_HEIGHT, { 14, 18, 27 })
+
+    -- progs button (matches hit_menu_button: x < 112)
+    draw_rect(0, 0, 112, BAR_HEIGHT, menu_open and LIGHT or BLUE)
+    draw_text(10, 3, "progs", WHITE)
+
+    -- window tabs (matches handle_click: start at 240, same width and 4px gap)
+    local tab_x = 240
+    for _, win in ipairs(windows) do
+        local tab_w = math.min(200, math.max(112, (#win.title + 2) * 16))
+        local color = DARK
+        if win == focused then
+            color = BLUE
+        elseif not win.minimized then
+            color = LIGHT
+        end
+        draw_rect(tab_x, 2, tab_w, BAR_HEIGHT - 4, color)
+        local columns = math.max(1, math.floor((tab_w - 16) / 16))
+        draw_text(tab_x + 8, 3, win.title:sub(1, columns), win.minimized and { 140, 150, 170 } or WHITE)
+        tab_x = tab_x + tab_w + 4
+    end
+end
+
 previous_mouse.x, previous_mouse.y, previous_mouse.left = sys_gui_mouse()
-sys_gui_clear(24, 29, 40)
-draw_text(32, 48, "XSNOS window manager", WHITE)
-draw_text(32, 88, "Choose Apps to launch a GUI program.", WHITE)
-sys_gui_present()
 
 while true do
     handle_mouse()
